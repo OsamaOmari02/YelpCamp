@@ -7,7 +7,11 @@ const methodOverride = require('method-override');
 const ejsMate = require('ejs-mate');
 const session = require('express-session');
 const flash = require('connect-flash');
+const passport = require('passport');
+const LocalStrategy = require('passport-local');
+const User = require('./models/user');
 
+const userRoutes = require('./routes/user');
 const campgrounds = require('./routes/campgrounds');
 const reviews = require('./routes/reviews');
 
@@ -41,17 +45,32 @@ const sessionConfig = {
         maxAge: 1000 * 60 * 60 * 24 * 7,
     }
 }
+
 app.use(session(sessionConfig));
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use(new LocalStrategy(User.authenticate()));
+
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 app.use((req,res,next) => {
+    console.log(req.session);
+    res.locals.user = req.user;
     res.locals.error = req.flash('error');
     res.locals.success = req.flash('success');
     next();
 })
 
+app.use('/',userRoutes);
 app.use('/campgrounds',campgrounds);
 app.use('/campgrounds/:id/reviews', reviews);
 
+app.get('/fakeUser', async(re,res) =>{
+    const user = new User({email: 'osama.omari@gamil.com',username: 'osama'});
+    const newUser = await User.register(user,'chicken')
+    res.send(newUser);
+})
 
 app.get('/', (req, res) => {
     res.render('home')
@@ -67,6 +86,7 @@ app.use((err, req, res, next) => {
     if (!err.message) err.message = 'Oh No, something went wrong!!';
     res.status(statusCode).render('error', { err });
 })
+
 
 
 app.listen(3000, () => {
