@@ -1,6 +1,6 @@
 (() => {
     'use strict'
-
+    bsCustomFileInput.init()
     const forms = document.querySelectorAll('.validated-form')
 
     Array.from(forms).forEach(form => {
