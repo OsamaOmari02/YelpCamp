@@ -1,5 +1,4 @@
-if (process.env.NODE_ENV!=="production")
-{
+if (process.env.NODE_ENV !== "production") {
     require('dotenv').config();
 }
 
@@ -20,7 +19,14 @@ const userRoutes = require('./routes/user');
 const campgrounds = require('./routes/campgrounds');
 const reviews = require('./routes/reviews');
 
-mongoose.connect('mongodb://localhost:27017/yelp-camp');
+const mongoSanitize = require('express-mongo-sanitize');
+const helmet = require('helmet');
+
+const MongoStore = require('connect-mongo');
+
+const dbUrl = process.env.DB_URL || 'mongodb://localhost:27017/yelp-camp';
+
+mongoose.connect(dbUrl);
 const db = mongoose.connection;
 
 mongoose.connection.on('error', err => {
@@ -39,13 +45,76 @@ app.use(express.urlencoded({ extended: true }))
 app.use(methodOverride('_method'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(flash());
+app.use(mongoSanitize({ replaceWith: '_', }));
+app.use(helmet({ contentSecurityPolicy: false, }));
+
+const scriptSrcUrls = [
+    "https://stackpath.bootstrapcdn.com/",
+    "https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js",
+    "https://api.tiles.mapbox.com/",
+    "https://api.mapbox.com/",
+    "https://kit.fontawesome.com/",
+    "https://cdnjs.cloudflare.com/",
+    "https://cdn.jsdelivr.net",
+];
+const styleSrcUrls = [
+    "https://kit-free.fontawesome.com/",
+    "https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css",
+    "https://stackpath.bootstrapcdn.com/",
+    "https://api.mapbox.com/",
+    "https://api.tiles.mapbox.com/",
+    "https://fonts.googleapis.com/",
+    "https://use.fontawesome.com/",
+];
+const connectSrcUrls = [
+    "https://api.mapbox.com/",
+    "https://a.tiles.mapbox.com/",
+    "https://b.tiles.mapbox.com/",
+    "https://events.mapbox.com/",
+];
+const fontSrcUrls = [];
+app.use(
+    helmet.contentSecurityPolicy({
+        directives: {
+            defaultSrc: [],
+            connectSrc: ["'self'", ...connectSrcUrls],
+            scriptSrc: ["'unsafe-inline'", "'self'", ...scriptSrcUrls],
+            styleSrc: ["'self'", "'unsafe-inline'", ...styleSrcUrls],
+            workerSrc: ["'self'", "blob:"],
+            objectSrc: [],
+            imgSrc: [
+                "'self'",
+                "blob:",
+                "data:",
+                "https://res.cloudinary.com/dyduu2jze/", //SHOULD MATCH YOUR CLOUDINARY ACCOUNT! 
+                "https://images.unsplash.com/",
+            ],
+            fontSrc: ["'self'", ...fontSrcUrls],
+        },
+    })
+);
+
+const secret = process.env.SECRET || 'thisshouldbeabettersecret!';
+
+const store = MongoStore.create({
+    mongoUrl: dbUrl,
+    secret,
+    touchAfter: 24 * 60 * 60,
+});
+
+store.on("error", function (e) {
+    console.log("Session Store Error", e);
+});
 
 const sessionConfig = {
-    secret: 'thisshouldbeabettersecret!',
+    store,
+    name: 'session',
+    secret,
     resave: false,
     saveUninitialized: true,
     cookie: {
         httpOnly: true,
+        // secure: true,
         expires: Date.now() + 1000 * 60 * 60 * 24 * 7,
         maxAge: 1000 * 60 * 60 * 24 * 7,
     }
@@ -59,7 +128,7 @@ passport.use(new LocalStrategy(User.authenticate()));
 passport.serializeUser(User.serializeUser());
 passport.deserializeUser(User.deserializeUser());
 
-app.use((req,res,next) => {
+app.use((req, res, next) => {
     console.log(req.session);
     res.locals.user = req.user;
     res.locals.error = req.flash('error');
@@ -67,18 +136,18 @@ app.use((req,res,next) => {
     next();
 })
 
-app.use('/',userRoutes);
-app.use('/campgrounds',campgrounds);
+app.use('/', userRoutes);
+app.use('/campgrounds', campgrounds);
 app.use('/campgrounds/:id/reviews', reviews);
 
-app.get('/fakeUser', async(re,res) =>{
-    const user = new User({email: 'osama.omari@gamil.com',username: 'osama'});
-    const newUser = await User.register(user,'chicken')
+app.get('/fakeUser', async (req, res) => {
+    const user = new User({ email: 'osama.omari@gamil.com', username: 'osama' });
+    const newUser = await User.register(user, 'chicken')
     res.send(newUser);
 })
 
 app.get('/', (req, res) => {
-    res.render('home')
+    res.render('home.ejs')
 })
 
 
